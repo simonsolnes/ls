@@ -83,7 +83,10 @@ else:
         git = False
 
 for f in sorted(os.listdir(path), key=lambda x: x.lower()):
-    data = get_data(os.lstat(path + f), path + f, f) 
+    try:
+        data = get_data(os.lstat(path + f), path + f, f) 
+    except:
+        data = {'name': f, 'type': 'file', 'size': 0, 'metadata': {}}
     if git:
         X, Y = git.get(data['name'], '  ')
         print(gitformat[X](X) + gitformat[Y](Y), end=' ')
