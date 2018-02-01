@@ -9,15 +9,13 @@ bash = lambda cmd: subprocess.check_output(cmd, shell=True).decode('utf-8')
 
 def colorize(x, frmt='normal', fg='normal', bg='normal'):
     c = {"black" : 0, "red" : 1, "green" : 2, "yellow" : 3, "blue" : 4, "magenta" : 5, "cyan" : 6, "white" : 7, "normal" : 8}
-    f = {"normal" : 0, "bold" : 1, "faint" : 2, "italic" : 3, "underline" : 4, "slowblink" : 5, "rapidblink" : 6, "negative" : 7, "conceal" : 8, "crossedout" : 9}
+    f = {"normal" : 0, "bold" : 1, "faint" : 2, "italic" : 3, "underline" : 4}
     return '\x1b['+str(f[frmt])+';'+str(30+c[fg])+';'+str(40+c[bg])+'m'+x+'\x1b[0m'
 
-def human_size(num, suffix='B'):
-    for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
-        if abs(num) < 1024.0:
-            return str(round(num)) + unit + suffix
-        num /= 1024.0
-    return str(round(num)) + 'Yi' + suffix
+def human_size(number):
+	nums = [(number / (1024.0 ** i), unit) for i, unit in enumerate(' KMGTPEZY')]
+	filtered = [num for i, num in enumerate(nums) if num[0] < 1024 or i == len(nums) - 1]
+	return str(round(filtered[0][0])).rjust(3) + str(' ' + (filtered[0][1] + 'iB' if filtered[0][1] != ' ' else 'B')).ljust(4)
 
 sizeformat = lambda x: colorize(human_size(x).rjust(6), 'faint')
 
@@ -37,11 +35,11 @@ gitformat = {
 }
 
 typeformat = {
-    'file': lambda x: colorize(x),
-    'exec': lambda x: colorize(x, 'italic', 'green'),
-    'symlink': lambda x: colorize(x, 'italic', 'yellow'),
-    'dotfile': lambda x: colorize(x, 'faint'),
-    'directory': lambda x: colorize(x, 'bold', 'magenta'),
+    'file':			lambda x: colorize(x),
+    'exec':			lambda x: colorize(x, 'italic', 'green'),
+    'symlink':		lambda x: colorize(x, 'italic', 'yellow'),
+    'dotfile':		lambda x: colorize(x, 'faint'),
+    'directory':	lambda x: colorize(x, 'bold', 'magenta'),
 }
 
 def get_data(stat, path, name):
