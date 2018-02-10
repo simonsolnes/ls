@@ -17,82 +17,110 @@ def human_size(number):
 	filtered = [num for i, num in enumerate(nums) if num[0] < 1024 or i == len(nums) - 1]
 	return str(round(filtered[0][0])).rjust(3) + str(' ' + (filtered[0][1] + 'iB' if filtered[0][1] != ' ' else 'B')).ljust(4)
 
-sizeformat = lambda x: colorize(human_size(x).rjust(6), 'faint')
-
-childrenformat = lambda x: colorize('[' + str(x) + ' ☰ ]', 'faint')
-
-realfileformat = lambda x: colorize('→ ', 'bold') + (typeformat[x['type']](x['name']) if isinstance(x, dict) else colorize('broken link', fg='red'))
 
 gitformat = {
-	'?': lambda x: colorize(x, fg='red'),
-	'M': lambda x: colorize(x, fg='red'),
-	'U': lambda x: colorize(x, fg='red'),
-	'A': lambda x: colorize(x, fg='green'),
-	'D': lambda x: colorize(x, fg='green'),
-	'R': lambda x: colorize(x, fg='green'),
-	'C': lambda x: colorize(x, fg='green'),
-	' ': lambda x: ' '
+	'?': ['normal', 'red'],
+	'M': ['normal', 'red'],
+	'U': ['normal', 'red'],
+	'A': ['normal', 'green'],
+	'D': ['normal', 'green'],
+	'R': ['normal', 'green'],
+	'C': ['normal', 'green'],
+	' ': []
 }
 
 typeformat = {
-	'file':			lambda x: colorize(x),
-	'exec':			lambda x: colorize(x, 'italic', 'green'),
-	'symlink':		lambda x: colorize(x, 'italic', 'yellow'),
-	'dotfile':		lambda x: colorize(x, 'faint'),
-	'directory':	lambda x: colorize(x, 'bold', 'magenta'),
+	'file':			[],
+	'exec':			['italic', 'green'],
+	'symlink':		['italic', 'yellow'],
+	'dotfile':		['faint'],
+	'dir':			['bold', 'magenta'],
 }
 
-def get_data(stat, path, name):
-	mode = int(oct(stat[0])[2:-3])
-	size =  stat[6]
-	metadata = {}
-	filetype = 'file'
 
-	if (int(oct(stat[0])[-3:][0]) + 1) % 2 == 0 and mode == 100:
-		filetype = 'exec'
-	if mode == 40:
-		filetype = 'directory'
-		name += '/'
-		metadata['children'] = len(os.listdir(path))
-	if name[0] == '.' and len(name) > 1 and name[1] != '.':
-		filetype = 'dotfile'
-	if mode == 120:
-		if filetype == 'file':
-			filetype = 'symlink' 
-		realpath = os.path.relpath(os.path.realpath(path))
-		if os.path.isfile(realpath) or os.path.isdir(realpath):
-			metadata['realfile'] = get_data(os.lstat(realpath), realpath, realpath) 
-			size = metadata['realfile']['size']
-			del metadata['realfile']['size']
-		else:
-			metadata['realfile'] = 'broken link'
-	return {'name': name, 'path': path, 'type': filetype, 'size': size, 'metadata': metadata}
+class Git():
+	def __init__(self, path):
+		self.git = False
+		if path == './':
+			try:
+				subprocess.check_output('git rev-parse --is-inside-work-tree 2>&1 >/dev/null',shell=True)
+				self.stats = {f[3:].split('/')[-1]: f[:2] for f in bash('git status --short').split('\n')}
+				self.git = True
+			except:
+				self.git = False
 
+	def get_status(self, path):
+		if self.git == False:
+			return ''
+		status = self.stats.get(path, '  ')
+		if len(status) != 2:
+			return '  '
+		X, Y = status
+		X = colorize(X, *gitformat.get(X, []))
+		Y = colorize(Y, *gitformat.get(Y, []))
+		return X + Y + ' '
+		
+	
+class File(threading.Thread):
+	def __init__(self, root, name, git):
+		threading.Thread.__init__(self)
+		self.root = root
+		self.name = name
+		self.path = root + name
+		self.git = git.get_status(self.name)
 
-if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
-	path = sys.argv[1]
-	git = False
-else:
-	path = './'
-	try:
-		bash('git rev-parse --is-inside-work-tree 2>&1 >/dev/null')
-		git = {f[3:].split('/')[-1]: f[:2] for f in bash('git status --short').split('\n')}
-	except:
-		git = False
+	def run(self):
+		stat = os.lstat(self.path)
+		mode = int(oct(stat[0])[2:-3])
+		self.size = stat[6]
+		self.filetype = 'file'
+		self.children = 0
 
-for f in sorted(os.listdir(path), key=lambda x: x.lower()):
-	try:
-		data = get_data(os.lstat(path + f), path + f, f) 
-	except:
-		data = {'name': f, 'type': 'file', 'size': 0, 'metadata': {}}
-	if git:
-		X, Y = git.get(data['name'], '  ')
-		print(gitformat[X](X) + gitformat[Y](Y), end=' ')
-	print(sizeformat(data['size']), end=' ')
-	print(typeformat[data['type']](data['name']), end=' ')
-	if 'realfile' in data['metadata']:
-		print(realfileformat(data['metadata']['realfile']), end='')
-	if 'children' in data['metadata']:
-		print(childrenformat(data['metadata']['children']), end='')
-	print(end=' ')
-	print()
+		try:
+			if (int(oct(stat[0])[-3:][0]) + 1) % 2 == 0 and mode == 100:
+				self.filetype = 'exec'
+			if mode == 40:
+				self.filetype = 'dir'
+				self.name += '/'
+				self.children = len(os.listdir(self.path))
+			if self.name[0] == '.' and len(self.name) > 1 and self.name[1] != '.':
+				self.filetype = 'dotfile'
+			if mode == 120:
+				if self.filetype == 'file':
+					self.filetype = 'symlink' 
+				self.realpath = os.path.relpath(os.path.realpath(self.path))
+		except:
+			pass
+
+	def __repr__(self):
+		git = self.git
+		size = colorize(human_size(self.size).rjust(6), 'faint') + ' '
+		name = colorize(self.name, *typeformat[self.filetype]) + ' '
+		children = ''
+		points = ''
+		if self.filetype == 'dir':
+			children = colorize('[' + str(self.children) + ']', 'faint')
+		if self.filetype == 'symlink':
+			points = colorize('→ ' + self.realpath, 'faint')
+		
+		return git + size + name + children + points
+		
+def main():
+	if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
+		root = sys.argv[1] + '/'
+	else:
+		root = './'
+	git = Git(root)
+	files = []
+	for f in os.listdir(root):
+		files.append(File(root, f, git))
+	for f in files:
+		f.start()
+	for f in files:
+		f.join()
+	files = sorted(files, key=lambda x: x.name.lower())
+	for f in files:
+		print(f)
+	
+if __name__ == '__main__':
+	main()
