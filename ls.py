@@ -17,6 +17,8 @@ def human_size(number):
 	filtered = [num for i, num in enumerate(nums) if num[0] < 1024 or i == len(nums) - 1]
 	return str(round(filtered[0][0])).rjust(3) + str(' ' + (filtered[0][1] + 'iB' if filtered[0][1] != ' ' else 'B')).ljust(4)
 
+def strip_ansi(string):
+    return bash("sed -r \"s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g\" <<<\"" + string + '"')
 
 gitformat = {
 	'?': ['normal', 'red'],
@@ -44,7 +46,7 @@ class Git():
 		if path == './':
 			try:
 				subprocess.check_output('git rev-parse --is-inside-work-tree 2>&1 >/dev/null',shell=True)
-				self.stats = {f[3:].split('/')[-1]: f[:2] for f in bash('git status --short').split('\n')}
+				self.stats = {f[3:]: f[:2] for f in strip_ansi(bash('git status --short')).split('\n') if f}
 				self.git = True
 			except:
 				self.git = False
